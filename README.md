@@ -14,7 +14,7 @@ Hank is coding for a real Amiga 1200, M68020, 2Mb chipram, 8Mb fastram, 68882 fp
 - I use the hardware [header files](https://github.com/AmigaPorts/Amiga-Scoopex-C) written by him 
 
 ## PHOTON of SCOOPEX 
-for his wonderfull tutorials on [youtube](https://www.youtube.com/channel/UC1lfCoAuwbQ22H-KoImEygg)
+for his tutorials on [youtube](https://www.youtube.com/channel/UC1lfCoAuwbQ22H-KoImEygg)
 
 ## Wei-Ju Wu 
-for his nice tutorials on [youtube](https://www.youtube.com/channel/UC1lfCoAuwbQ22H-KoImEygg)
+for his tutorials on [youtube](https://www.youtube.com/channel/UC1lfCoAuwbQ22H-KoImEygg)
