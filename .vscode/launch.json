@@ -7,7 +7,7 @@
             "preLaunchTask": "compile",
             "name": "Amiga 500",
             "config": "A500",
-            "program": "${workspaceFolder}/a.mingw",
+            "program": "${workspaceFolder}/bin/playingfields",
             "kickstart": "c:/amiga-dev/Kickstarts/amiga-os-130.rom",
             "internalConsoleOptions": "openOnSessionStart"
         },
@@ -17,7 +17,7 @@
             "preLaunchTask": "compile",
             "name": "Amiga 1200",
             "config": "A1200",
-            "program": "${workspaceFolder}/a.mingw",
+            "program": "${workspaceFolder}/bin/playingfields",
             "kickstart": "c:/amiga-dev/Kickstarts/amiga-os-310-a1200.rom",
             "internalConsoleOptions": "openOnSessionStart"
         }

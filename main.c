@@ -5,7 +5,7 @@ int main()
 	InitDemo();
 
 	MakePolys();
-
+int x=20;
 	while (!MouseLeft())
 	{
 		WaitVbl();
@@ -14,8 +14,8 @@ int main()
 		ClearBitmap(bmpDraw);
 		WaitBlt();
 		
-		PolygonDraw(bmpDraw, PolyBox, 4, 7, TRUE);
-		EllipseDraw(bmpDraw, 2, 80, 80, 50, 50);
+		EllipseDraw(bmpDraw, 2, x++, 80, 20, 20);		
+		
 	}
 
 	// END
@@ -250,8 +250,7 @@ void Points2DRotate(Point2D *pointsA, Point2D *pointsB, USHORT length, Point2D o
 
 void CopyBitmap(ImageContainer bmpS, ImageContainer bmpD)
 {
-	WaitBlt();
-	WaitBlt();
+	WaitBlt();	
 
 	custom->bltcon0 = 0x09f0;
 	custom->bltcon1 = 0x0000;
@@ -266,7 +265,6 @@ void CopyBitmap(ImageContainer bmpS, ImageContainer bmpD)
 
 void ClearBitmap(ImageContainer bmpD)
 {
-	WaitBlt();
 	WaitBlt();
 
 	custom->bltcon0 = 0x0900;
