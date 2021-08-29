@@ -1,5 +1,9 @@
+#ifndef HANK_HEAD
+#define HANK_HEAD 1
+
 #include "../support/gcc8_c_support.h"
 #include "custom_defines.h"
+#include "DemoTypes.h"
 #include "vector.h"
 #include <clib/alib_stdio_protos.h>
 #include <proto/exec.h>
@@ -16,7 +20,7 @@
 
 #define Abs(a) (a < 0 ? a * -1 : a)
 
-#define PI (3.141592657)
+#define PI (3141)
 struct ExecBase *SysBase;
 volatile struct Custom *custom;
 struct DosLibrary *DOSBase;
@@ -31,30 +35,6 @@ volatile static APTR VBR = 0;
 static APTR SystemIrq;
 struct View *ActiView;
 
-struct _imageContainer
-{
-    WORD LeftEdge; /* starting offset relative to some origin */
-    WORD TopEdge;  /* starting offsets relative to some origin */
-    WORD Width;    /* pixel size (though data is word-aligned) */
-    WORD Height;   /* height in px*/
-    WORD Depth;    /* >= 0, for images you create		*/
-    UBYTE BytesPerRow;
-    UBYTE *ImageData;
-    UBYTE *Planes[8];
-};
-typedef struct _imageContainer ImageContainer;
-
-static APTR GetVBR(void)
-{
-    APTR vbr = 0;
-    UWORD getvbr[] = {0x4e7a, 0x0801, 0x4e73}; // MOVEC.L VBR,D0 RTE
-
-    if (SysBase->AttnFlags & AFF_68010)
-        vbr = (APTR)Supervisor((ULONG(*)())getvbr);
-
-    return vbr;
-}
-
 #define ScreenW (320)
 #define ScreenH (256)
 #define ScreenBpls (3)
@@ -64,28 +44,41 @@ static APTR GetVBR(void)
 #define ScreenStl (ScreenBplt * ScreenH)
 
 USHORT *copPtr, *copper1;
-extern struct Image LogoImage;
-extern UWORD bmpLogoPaletteRGB4[8];
+extern struct Image imgLogo;
+extern UWORD imgLogoPaletteRGB4[8];
+extern struct Image imgCookie;
+extern UWORD imgCookiePaletteRGB4[8];
 
-UBYTE bmpWorkData[ScreenStl] __attribute__((section(".MEMF_CHIP_bmpDisplay")));
-ImageContainer bmpDisplay =
-    {0, 0, /* LeftEdge, TopEdge */
-     320, 256, 3,
-     320 / 8,     /* Width, Height, Depth */
-     bmpWorkData, /* ImageData */
-     NULL,
-     NULL};
+struct RastPort *RPortA;
 
-UBYTE bmpDrawData[ScreenStl] __attribute__((section(".MEMF_CHIP_bmpDraw")));
-ImageContainer bmpDraw = {
-    0, 0, /* LeftEdge, TopEdge */
-    320, 256, 3,
-    320 / 8,     /* Width, Height, Depth */
-    bmpDrawData, /* ImageData */
-    NULL,
-    NULL};
+ImageContainer bmpLogo;
+ImageContainer bmpCookie;
 
-UBYTE *bmpLogoPlanes[3];
+UWORD bmpDisplayData[ScreenStl/2] __attribute__((section("BMP_DISP.MEMF_CHIP")));
+ImageContainer bmpDisplay = {
+    {
+        320/8,
+        256,
+        0,
+        3,
+        NULL
+    },
+    bmpDisplayData, /* ImageData */
+    0, 0,
+    320,256};
+
+UWORD bmpCookieMaskData[ScreenStl/2]__attribute__((section("BMP_COOKIEMASK.MEMF_CHIP")));;
+ImageContainer bmpCookieMask = {
+    {
+        320/8,
+        256,
+        0,
+        3,
+        NULL
+    },
+    bmpDisplayData, /* ImageData */
+    0, 0,
+    320,256};
 
 // proto
 inline short MouseLeft() { return !((*(volatile UBYTE *)0xbfe001) & 64); }
@@ -99,7 +92,7 @@ USHORT colors[] = {
     0x0000, 0x0556, 0x0C95, 0x0EA6, 0x0432, 0x0531, 0x0212, 0x0881};
 
 // put copperlist into chip mem so we can use it without copying
-const UWORD copper2[] __attribute__((section(".MEMF_CHIP"))) = {
+const UWORD copper2[] __attribute__((section("COP1.MEMF_CHIP"))) = {
     0xe001, 0xff00, offsetof(struct Custom, color[29]), 0x0eee, // line 0xe0
     0xe101, 0xff00, offsetof(struct Custom, color[29]), 0x0ddd, // line 0xe1
     0xe201, 0xff00, offsetof(struct Custom, color[29]), 0x0ccc, // line 0xe2
@@ -118,6 +111,17 @@ const UWORD copper2[] __attribute__((section(".MEMF_CHIP"))) = {
     0xffff, 0xfffe                                              // end copper list
 };
 
+static APTR GetVBR(void)
+{
+    APTR vbr = 0;
+    UWORD getvbr[] = {0x4e7a, 0x0801, 0x4e73}; // MOVEC.L VBR,D0 RTE
+
+    if (SysBase->AttnFlags & AFF_68010)
+        vbr = (APTR)Supervisor((ULONG(*)())getvbr);
+
+    return vbr;
+}
+
 inline USHORT *copSetPlanes(UBYTE bplPtrStart, USHORT *copListEnd, UBYTE **planes, int numPlanes)
 {
     for (USHORT i = 0; i < numPlanes; i++)
@@ -127,6 +131,21 @@ inline USHORT *copSetPlanes(UBYTE bplPtrStart, USHORT *copListEnd, UBYTE **plane
         *copListEnd++ = (UWORD)(addr >> 16);
         *copListEnd++ = offsetof(struct Custom, bplpt[i + bplPtrStart]) + 2;
         *copListEnd++ = (UWORD)addr;
+    }
+    return copListEnd;
+}
+
+inline USHORT *copSetOddEvenPlanes(UBYTE bplPtrStart, USHORT *copListEnd, UBYTE **planes, int numPlanes, BOOL odd)
+{
+    BYTE plane = odd ? 1 : 0;
+    for (USHORT i = 0; i < numPlanes; i++)
+    {
+        ULONG addr = (ULONG)planes[i];
+        *copListEnd++ = offsetof(struct Custom, bplpt[plane + bplPtrStart]);
+        *copListEnd++ = (UWORD)(addr >> 16);
+        *copListEnd++ = offsetof(struct Custom, bplpt[plane + bplPtrStart]) + 2;
+        *copListEnd++ = (UWORD)addr;
+        plane += 2;
     }
     return copListEnd;
 }
@@ -323,3 +342,11 @@ void CopyBitmap(ImageContainer bmpS, ImageContainer bmpD);
 void ClearBitmap(ImageContainer bmpD);
 
 void MakePolys();
+
+void SimpleBlit(ImageContainer imgS, ImageContainer imgD, Point2D startS, Point2D startD, USHORT height, USHORT width);
+
+void GetCookieMask(UBYTE planes, UBYTE **bmp, UBYTE *destMask, USHORT height, USHORT width);
+
+void ImageToImgContainer(struct Image *img, ImageContainer *imgC);
+
+#endif // HANK_HEAD

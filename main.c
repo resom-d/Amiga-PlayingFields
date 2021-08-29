@@ -2,20 +2,23 @@
 
 int main()
 {
-	InitDemo();
+	Point2D ps = {0, 0};
+	Point2D pd = {(320 >> 1) - 16, (256 >> 1) - 16};
 
 	MakePolys();
-	int x = 20;
+
+	InitDemo();
+
+	// InitRastPort(RPortA);
+	// RPortA->BitMap = &bmpLogo.Bitmap;
+
+	WaitVbl();
+	//CopyBitmap(bmpCookie, bmpDisplay);
+	SimpleBlit(bmpCookie, bmpDisplay, ps, pd, 32, 32);
 	while (!MouseLeft())
 	{
 		WaitVbl();
-
-		CopyBitmap(bmpDraw, bmpDisplay);
-		ClearBitmap(bmpDraw);
-		WaitBlt();
-
-		EllipseDraw(bmpDraw, 2, x, x, 20, 20);
-		if(x< 150)x++;
+		//SimpleBlit(bmpCookie, bmpDisplay, ps, pd, 32, 32);
 	}
 
 	// END
@@ -29,7 +32,7 @@ void SetCopper()
 	copPtr = screenScanDefault(copPtr);
 	//enable bitplanes
 	*copPtr++ = BPLCON0;
-	*copPtr++ = (0 << 10) /*dual pf*/ | (1 << 9) /*color*/ | ((ScreenBpls) << 12) /*num bitplanes*/;
+	*copPtr++ = (1 << 10) /*dual pf*/ | (1 << 9) /*color*/ | ((ScreenBpls * 2) << 12) /*num bitplanes*/;
 	*copPtr++ = BPLCON1; //scrolling
 	*copPtr++ = 0;
 	*copPtr++ = BPLCON2; //playfied priority
@@ -42,18 +45,15 @@ void SetCopper()
 	*copPtr++ = 0;
 
 	// set bitplane pointers
-	copPtr = copSetPlanes(0, copPtr, bmpDisplay.Planes, ScreenBpls);
-
+	copPtr = copSetOddEvenPlanes(0, copPtr, bmpLogo.Bitmap.Planes, ScreenBpls, TRUE);
+	copPtr = copSetOddEvenPlanes(0, copPtr, bmpDisplay.Bitmap.Planes, ScreenBpls, FALSE);
+	//copPtr = copSetPlanes(0, copPtr, bmpLogo.Bitmap.Planes, bmpLogo.Bitmap.Depth);
 	// set colors
 	for (int a = 0; a < 8; a++)
-		copPtr = copSetColor(copPtr, a, bmpLogoPaletteRGB4[a]);
-
-	copPtr = copWaitY(copPtr, 0x2c + 170);
-	//set bitplane modulo
-	*copPtr++ = BPL1MOD; //odd planes   1,3,5
-	*copPtr++ = -2 * ScreenBpl;
-	*copPtr++ = BPL2MOD; //even  planes 2,4
-	*copPtr++ = -2 * ScreenBpl;
+		copPtr = copSetColor(copPtr, a, imgCookiePaletteRGB4[a]);
+	// set colors
+	for (int a = 8; a < 16; a++)
+		copPtr = copSetColor(copPtr, a, imgLogoPaletteRGB4[a - 8]);
 
 	copPtr = copWaitXY(copPtr, 0xfe, 0xff);
 }
@@ -80,24 +80,21 @@ int InitDemo()
 #endif
 	Write(Output(), (APTR) "Hello console!\n", 15);
 
-	warpmode(1);
-	warpmode(0);
-
 	TakeSystem();
 	// TODO: precalc stuff here
 	copper1 = AllocMem(1024, MEMF_CHIP);
 	copPtr = copper1;
 
-	InitImagePlanes(&bmpDisplay);
-	InitImagePlanes(&bmpDraw);
-	for (int p = 0; p < LogoImage.Depth; p++)
-	{
-		bmpLogoPlanes[p] = (UBYTE *)LogoImage.ImageData + (p * (LogoImage.Width / 8 * LogoImage.Height));
-	}
+	ImageToImgContainer(&imgLogo, &bmpLogo);
+	ImageToImgContainer(&imgCookie, &bmpCookie);
 
-	WaitVbl();
+	InitImagePlanes(&bmpDisplay);
+	InitImagePlanes(&bmpLogo);
+	InitImagePlanes(&bmpCookie);
 
 	SetCopper();
+
+	WaitVbl();
 
 	custom->cop1lc = (ULONG)copper1;
 	custom->dmacon = DMAF_BLITTER; //disable blitter dma for copjmp bug
@@ -114,9 +111,9 @@ int InitDemo()
 
 void InitImagePlanes(ImageContainer *img)
 {
-	for (int p = 0; p < img->Depth; p++)
+	for (int p = 0; p < img->Bitmap.Depth; p++)
 	{
-		img->Planes[p] = (UBYTE *)img->ImageData + (p * (img->BytesPerRow * img->Height));
+		img->Bitmap.Planes[p] = (UBYTE *)img->ImageData + (p * (img->Bitmap.BytesPerRow * img->Height));
 	}
 }
 
@@ -124,13 +121,13 @@ void SetPixel(ImageContainer bitmap, USHORT x, USHORT y, UBYTE col)
 {
 	USHORT xb = (x) / 8;
 	UBYTE xo = 0x80 >> (x % 8);
-	USHORT yb = y * bitmap.BytesPerRow;
-	for (int pl = 0; pl < bitmap.Depth; pl++)
+	USHORT yb = y * bitmap.Bitmap.BytesPerRow;
+	for (int pl = 0; pl < bitmap.Bitmap.Depth; pl++)
 	{
-		bitmap.Planes[pl][yb + xb] &= ~xo;
+		bitmap.Bitmap.Planes[pl][yb + xb] &= ~xo;
 		if ((col >> pl) & (UBYTE)1)
 		{
-			bitmap.Planes[pl][yb + xb] |= xo;
+			bitmap.Bitmap.Planes[pl][yb + xb] |= xo;
 		}
 	}
 }
@@ -230,14 +227,14 @@ void EllipseDraw(ImageContainer bitmap, BYTE col, int xm, int ym, int a, int b)
 
 void MakePolys()
 {
-	PolyBox[0].X = 10;
-	PolyBox[0].Y = 10;
-	PolyBox[1].X = 50;
-	PolyBox[1].Y = 10;
-	PolyBox[2].X = 50;
-	PolyBox[2].Y = 50;
-	PolyBox[3].X = 10;
-	PolyBox[3].Y = 50;
+	PolyBox[0].X = 0;
+	PolyBox[0].Y = 0;
+	PolyBox[1].X = 40;
+	PolyBox[1].Y = 0;
+	PolyBox[2].X = 40;
+	PolyBox[2].Y = 40;
+	PolyBox[3].X = 0;
+	PolyBox[3].Y = 40;
 }
 
 void Points2DRotate(Point2D *pointsA, Point2D *pointsB, USHORT length, Point2D origin, int alpha)
@@ -260,7 +257,7 @@ void CopyBitmap(ImageContainer bmpS, ImageContainer bmpD)
 	custom->bltalwm = 0xffff;
 	custom->bltamod = 0;
 	custom->bltdmod = 0;
-	custom->bltsize = ((bmpS.Height * bmpS.Depth) << 6) + (bmpS.BytesPerRow / 2);
+	custom->bltsize = ((bmpS.Height * bmpS.Bitmap.Depth) << 6) + (bmpS.Bitmap.BytesPerRow / 2);
 }
 
 void ClearBitmap(ImageContainer bmpD)
@@ -275,5 +272,72 @@ void ClearBitmap(ImageContainer bmpD)
 	custom->bltalwm = 0xffff;
 	custom->bltamod = 0;
 	custom->bltdmod = 0;
-	custom->bltsize = ((bmpD.Height * bmpD.Depth) << 6) + (bmpD.BytesPerRow / 2);
+	custom->bltsize = ((bmpD.Height * bmpD.Bitmap.Depth) << 6) + (bmpD.Bitmap.BytesPerRow / 2);
+}
+
+void GetCookieMask(UBYTE planes, UBYTE **bmp, UBYTE *destMask, USHORT height, USHORT width)
+{
+	for (int x = 0; x < (width * height / 8); x++)
+	{
+		for (int p = 0; p < planes; p++)
+		{
+			destMask[x] |= bmp[p][x];
+		}
+	}
+}
+
+void SimpleBlit(ImageContainer imgA, ImageContainer imgD, Point2D startA, Point2D startD, USHORT height, USHORT width)
+{	
+	UBYTE *src = (UBYTE*)imgA.ImageData + (startA.Y * imgA.Bitmap.BytesPerRow) + (startA.X / 8);
+	UBYTE *dest = (UBYTE*)imgD.ImageData +(startD.Y * imgD.Bitmap.BytesPerRow) + (startD.X / 8);
+
+	custom->bltcon0 = 0x09f0;
+	custom->bltcon1 = 0x0000;
+	custom->bltafwm = 0xffff;
+	custom->bltalwm = 0xffff;
+	custom->bltamod = imgA.Bitmap.BytesPerRow - (width / 8);
+	custom->bltdmod = imgD.Bitmap.BytesPerRow - (width / 8);
+
+	for (int b = 0; b < imgA.Bitmap.Depth; b++)
+	{
+		WaitBlt();
+		custom->bltapt = src;
+		custom->bltdpt = dest;
+		custom->bltsize = ((height) << 6) + (width / 16);
+
+		src += imgA.Width/8*imgA.Height;
+		dest += imgD.Width/8*imgD.Height;
+
+	}
+}
+
+void CookieCut(UBYTE *bmpS, UBYTE *bmpD, UBYTE *mask, USHORT height, USHORT width, UBYTE planes)
+{
+	WaitBlt();
+
+	custom->bltcon0 = 0x0900;
+	custom->bltcon1 = 0x0000;
+	custom->bltapt = bmpS;
+	custom->bltbpt = bmpS;
+	custom->bltcpt = mask;
+	custom->bltdpt = bmpD;
+	custom->bltafwm = 0xffff;
+	custom->bltalwm = 0xffff;
+	custom->bltamod = 0;
+	custom->bltbmod = 0;
+	custom->bltcmod = 0;
+	custom->bltdmod = 0;
+	custom->bltsize = ((height * planes) << 6) + (width / 16);
+}
+
+void ImageToImgContainer(struct Image *img, ImageContainer *imgC)
+{
+	imgC->Bitmap.BytesPerRow = img->Width / 8;
+	imgC->Bitmap.Depth = img->Depth;
+	imgC->Bitmap.Rows = img->Height;
+	imgC->ImageData = img->ImageData;
+	imgC->LeftEdge = img->LeftEdge;
+	imgC->TopEdge = img->TopEdge;
+	imgC->Width = img->Width;
+	imgC->Height = img->Height;
 }

@@ -1,2 +1,2 @@
 obj/gcc8_a_support.o: \
- D\:/dirkm/RetroSystems/Amiga/XDev/C+/tyrAndfail/playingFields/support/gcc8_a_support.s
+ D\:/dirkm/Sources/XDev/Amiga/C+/tyrAndfail/playingFields/support/gcc8_a_support.s
